@@ -24,7 +24,7 @@
 
             .grid-container {
                 display: grid;
-                grid-template-columns: 400px 400px;
+                grid-template-columns: 400px 800px;
                 column-gap: 10px;
             }
 
@@ -49,11 +49,69 @@
             setTimeout(MQTTconnect, reconnectTimeout);
         }
 
+        function isJson(str) {
+            try {
+                JSON.parse(str);
+            } catch (e) {
+                return false;
+            }
+        return true;
+        }
+
         function onMessageArrived(r_message) {
+            markergroup.clearLayers();
             out_msg = "Message Received: " + r_message.payloadString + "<br>";
             out_msg = out_msg + "Message Topic: " + r_message.destinationName;
             console.log(out_msg);
             document.getElementById("messages").innerHTML = out_msg;
+            if (isJson(r_message.payloadString) == true) {
+                const obj_rec = JSON.parse(r_message.payloadString);
+                console.log(obj_rec);
+                var long = obj_rec.longitude;
+                var lat = obj_rec.latitude;
+                var temp = obj_rec.temperature;
+                var blueIcon = new L.Icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    shadowSize: [41, 41]
+                });
+                var greenIcon = new L.Icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    shadowSize: [41, 41]
+                });
+                var redIcon = new L.Icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    shadowSize: [41, 41]
+                });
+                if (temp >= -40 && temp < 10) {
+                    your_location = L.marker([lat, long], {icon: blueIcon}).addTo(markergroup);
+                    your_location.bindPopup("Temperature: " + temp + "<br>" + "Longitude: " + long + "<br>" + "Latitude: " + lat + "<br>");
+                }
+                else if (temp >= 10 && temp < 30) {
+                    your_location = L.marker([lat, long], {icon: greenIcon}).addTo(markergroup);
+                    your_location.bindPopup("Temperature: " + temp + "<br>" + "Longitude: " + long + "<br>" + "Latitude: " + lat + "<br>");
+                }
+                else {
+                    your_location = L.marker([lat, long], {icon: redIcon}).addTo(markergroup);
+                    your_location.bindPopup("Temperature: " + temp + "<br>" + "Longitude: " + long + "<br>" + "Latitude: " + lat + "<br>");
+                }
+                document.getElementById("messages").innerHTML = out_msg;
+                map.setView([lat, long], 15);
+            }  
+            else {
+                document.getElementById("messages").innerHTML = out_msg;
+            }
         }
         
         function onConnect() {
@@ -76,8 +134,7 @@
             console.log("Connecting to: " + host + " On Port " + port);
             var x = Math.floor(Math.random() * 10000); 
             var cname = "orderform-" + x;
-            //mqtt = new Paho.MQTT.Client(host, port, cname);
-            mqtt = new Paho.Client("wss://test.mosquitto.org:8080/mqtt", cname);
+            mqtt = new Paho.MQTT.Client(host, port, cname);
             var options = {
                 timeout: 3,
                 onSuccess: onConnect,
@@ -117,12 +174,57 @@
             var topic = document.forms["smessage"]["Ptopic"].value;
             message = new Paho.MQTT.Message(msg);
             if (topic == "")
-                message.destinationName = "test-topic"
+                message.destinationName = "551-NathanLewis-My-Temperature"
             else
                 message.destinationName = topic;
             mqtt.send(message);
             return false;
-        } 
+        }
+
+        function sendloc(bool) {
+            function endloc(watchID) {
+                navigator.geolocation.clearWatch(watchID);
+                markergroup.clearLayers();
+                return false;
+            }
+            const successCallback = (position) => {
+                obj = {
+                    longitude: position.coords.longitude,
+                    latitude: position.coords.latitude,
+                    temperature: randtemp()
+                }
+                document.getElementById("messages").innerHTML = "";
+                if (connected_flag==0) {
+                    out_msg = "<b>Not Connected: Can't Send</b>"
+                    console.log(out_msg);
+                    document.getElementById("messages").innerHTML = out_msg;
+                    return false;
+                }
+                var topic = document.forms["smessage"]["Ptopic"].value;
+                message = new Paho.MQTT.Message(JSON.stringify(obj));
+                if (topic == "")
+                    message.destinationName = "551-NathanLewis-My-Temperature"
+                else
+                    message.destinationName = topic;
+                mqtt.send(message);
+                }
+            const errorCallback = (error) => {
+                console.error(error);
+            }
+            const watchID = navigator.geolocation.watchPosition(successCallback, errorCallback);
+            if (bool == false) {
+                endloc(watchID);
+            }
+            return false;
+        }
+
+        //Temperature range: -40 to +60 degrees Celcius (as per LAB 4 README)
+        function randtemp() {
+            min = Math.ceil(-40);
+            max = Math.floor(60);
+            return Math.floor(Math.random() * (max - min + 1) + min);
+        }
+
         </script>
     </head>
     <body>
@@ -165,19 +267,19 @@
             <input type = "submit" value = "Submit">
         </form>
         <br>
-        
+
         <div class = "grid-container2">
             <div class = "grid-child" id = "sshare">
-                <input type = "button" onsubmit = "return sendloc()" name = "startshare" value = "Start Sharing">
+                <input type = "button" onclick = "return sendloc(true)" id = "startshare" value = "Start Sharing">
             </div>
             <div class = "grid-child" id = "eshare">
-                <input type = "button" onsubmit = "return endloc()" name = "endshare" value = "End Sharing">
+                <input type = "button" onclick = "return sendloc(false)" id = "endshare" value = "End Sharing">
             </div>
         </div>
         <br>
         
         <div id = "map"></div>
-        <script>    
+        <script>
             var map = L.map('map').setView([51.030, -114.035], 11);
                 L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}', {
                     attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
@@ -187,6 +289,7 @@
                     zoomOffset: -1,
                     accessToken: 'pk.eyJ1IjoidmVnZXRhYmxlaHVudGVyIiwiYSI6ImNrenB1cTM4bzBkcHQybnJ4cDFwOHUzNnQifQ.XB2HogVSioH_O6t03oTGwA'
                 }).addTo(map);
+            var markergroup = L.layerGroup().addTo(map);
         </script>
     </body>
 </html>
